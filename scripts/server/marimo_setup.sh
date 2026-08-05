@@ -27,3 +27,4 @@ MARIMO_RAW_DATA_MOUNT="/data/raw"
 
 # 現在の環境で必要な場合に指定する。
 MARIMO_DNS_SERVER="172.20.1.10"
+

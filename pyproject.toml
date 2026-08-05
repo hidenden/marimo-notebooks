@@ -1,13 +1,174 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
 [project]
-name = "marimo-notebooks"
+name = "benchmark-analysis"
 version = "0.1.0"
+description = "Shared benchmark data access, preprocessing, analysis, and visualization library for marimo notebooks."
+readme = "README.md"
 requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary" }
 
 dependencies = [
-    "marimo",
-    "polars",
-    "pandas",
-    "altair",
-    "psycopg[binary]",
-    "pytest",
+    # Notebook environment
+    "marimo>=0.17,<1",
+
+    # DataFrames and data interchange
+    "polars>=1.30,<2",
+    "pandas>=2.2,<4",
+    "pyarrow>=18,<23",
+
+    # Visualization
+    "altair>=5.5,<7",
+    "matplotlib>=3.9,<4",
+    "plotly>=6,<7",
+
+    # PostgreSQL
+    "psycopg[binary]>=3.2,<4",
+
+    # Configuration and data formats
+    "python-dotenv>=1.0,<2",
+    "PyYAML>=6,<7",
+
+    # Common numerical and statistical processing
+    "numpy>=2,<3",
+    "scipy>=1.14,<2",
+
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+    "pytest-cov>=6,<8",
+    "ruff>=0.12,<1",
+    "pyright>=1.1.400,<2",
+]
+
+# 踏み台サーバーや、DBへ到達できる検証環境でのみ使用する。
+
+integration = [
+    "pytest>=8,<10",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/benchmark_analysis"]
+
+[tool.uv]
+
+# uv syncを実行した際、通常の依存関係とdevグループを導入する。
+
+default-groups = ["dev"]
+
+# このリポジトリをPythonパッケージとして仮想環境へインストールする。
+
+package = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = [
+    "--strict-config",
+    "--strict-markers",
+    "-ra",
+]
+markers = [
+    "integration: PostgreSQLや共有データ領域などの外部環境を使用するテスト",
+    "slow: 実行に比較的長い時間を要するテスト",
+]
+filterwarnings = [
+    "error",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["benchmark_analysis"]
+omit = [
+    "tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 70
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == '__main__':",
+    "raise NotImplementedError",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests", "notebooks"]
+
+# Git管理するPythonコード以外を除外する。
+
+extend-exclude = [
+    ".venv",
+    ".git",
+    "tests/fixtures",
+    "skills",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # Pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # import sorting
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "RUF",  # Ruff-specific rules
+]
+ignore = [
+    # 日本語を含むコメントや文字列では100文字を超えることがある。
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+
+# marimo Notebookでは、セル単位の構造や表示目的により
+
+# 通常のPythonモジュールとは異なる記述が必要になることがある。
+
+"notebooks/**/*.py" = [
+    "B018",
+    "E402",
+    "F401",
+    "F811",
+]
+
+"tests/**/*.py" = [
+    "S101",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+
+include = [
+    "src",
+    "tests",
+]
+
+exclude = [
+    ".venv",
+    ".git",
+    "tests/fixtures",
+    "skills", "**/node_modules", "**/__pycache__", "**/.*",
+]
+
+venvPath = "."
+venv = ".venv"
+
+reportMissingTypeStubs = false
+reportUnknownMemberType = false

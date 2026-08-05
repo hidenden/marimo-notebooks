@@ -220,3 +220,8 @@ __marimo__/
 # MacOS
 .DS_Store
 
+# Config files
+user.env
+db.env
+.marimo-user.env
+
