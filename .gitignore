@@ -151,6 +151,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.marimo-runtime/
 env/
 venv/
 ENV/
@@ -224,4 +225,3 @@ __marimo__/
 user.env
 db.env
 .marimo-user.env
-

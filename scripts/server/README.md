@@ -15,6 +15,8 @@
 - 共有生データディレクトリへの読み取り権限
 - PostgreSQL を利用する場合は、接続先ネットワークへの到達性と認証情報
 
+操作スクリプト自体は一般ユーザーとして実行してください。スクリプト内部の `sudo docker` だけがsudoを使用します。
+
 以降のコマンドは、特記がない限りリポジトリのルートで実行します。
 
 ## 初回準備
@@ -34,7 +36,7 @@ cp config/marimo-user.env.example .marimo-user.env
 | `MARIMO_IMAGE` | 必須 | 管理者から指定された Docker イメージ。`latest` ではなく検証済みバージョンを指定します。 |
 | `MARIMO_CONTAINER_NAME` | 必須 | 他の利用者と重複しないコンテナ名 |
 | `MARIMO_HOST_PORT` | 必須 | 踏み台サーバー側の利用者固有ポート（1024～65535） |
-| `MARIMO_WORKSPACE` | 必須 | このリポジトリを clone したディレクトリの絶対パス |
+| `MARIMO_WORKSPACE` | 必須 | このリポジトリを自分のHOME配下へcloneしたディレクトリの絶対パス。`${HOME}/marimo-notebooks` を推奨 |
 | `MARIMO_RAW_DATA_DIR` | 必須 | 共有生データディレクトリの絶対パス |
 | `MARIMO_HOST_ADDRESS` | 任意 | 公開アドレス。既定値は安全のため `127.0.0.1` |
 | `MARIMO_CONTAINER_PORT` | 任意 | コンテナ内の marimo ポート。既定値は `2718` |
@@ -80,12 +82,23 @@ sudo docker image inspect marimo-poc:0.1.0
 起動時には次の処理が行われます。
 
 - ワークスペースをコンテナの `MARIMO_WORKDIR` へ読み書き可能でマウント
+- コンテナをスクリプト実行者と同じ数値UID/GID（補助グループを含む）で実行
+- HOME、XDG、uv、TMPDIRの書き込み先を `/workspace/.marimo-runtime` と `/workspace/.venv` に限定
 - 共有生データを `MARIMO_RAW_DATA_MOUNT` へ読み取り専用でマウント
 - DB 接続設定を環境変数としてコンテナへ注入
 - 指定ポートを `127.0.0.1` に公開
 - コンテナの再起動ポリシーを `unless-stopped` に設定
 
 停止済みの同名コンテナがある場合は削除して作り直します。すでに起動中の場合は新しいコンテナを作らず、接続情報を表示します。
+
+`sudo ./scripts/server/marimo_run.sh start` のようにスクリプト全体をsudoで起動する必要はありません。通常どおり `./scripts/server/marimo_run.sh start` を実行してください。内部で組み立てられる主要なDockerオプションは次の形です。
+
+```text
+sudo docker run --user <利用者UID>:<利用者GID> \
+  --volume <HOME配下のclone先>:/workspace ...
+```
+
+このためNotebook、`.venv`、marimo設定、uvキャッシュはホスト側でも利用者自身の所有となり、root所有のファイルは作られません。共有生データをUnixの補助グループで読める利用者については、そのグループIDも `--group-add` で引き継がれます。
 
 ## PC から接続する
 
@@ -134,4 +147,5 @@ MARIMO_DB_ENV=/path/to/db.env \
 - `DB設定ファイルの権限を600にしてください`: `chmod 600 ~/.config/marimo/db.env` を実行します。
 - `ポート ... は既に使用されています`: 管理者に未使用ポートを確認し、`MARIMO_HOST_PORT` を変更します。
 - コンテナが起動しない: `./scripts/server/marimo_run.sh logs` と `sudo docker ps -a` で状態を確認します。
+- Notebookや`.venv`がroot所有になる: スクリプト全体をsudo化した独自ラッパーを使っていないか確認し、コンテナの `Config.User` が自分の `id -u:id -g` になっているか確認します。
 - ブラウザーから接続できない: コンテナの `status`、SSH トンネルの接続先ポート、ブラウザーの URL を順に確認します。踏み台サーバーのポートへ直接アクセスする構成ではありません。

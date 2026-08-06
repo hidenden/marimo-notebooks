@@ -64,6 +64,8 @@ uv run pyright
 
 踏み台サーバーでは Docker コンテナとして marimo を起動し、サーバーの localhost にだけポートを公開します。利用者の PC からは SSH トンネル経由で接続します。
 
+コンテナはホスト利用者と同じUID/GIDで動作し、Notebook、uv仮想環境、marimo設定、キャッシュなどの書き込みは、cloneしたリポジトリの `/workspace` マウント内で完結します。操作スクリプトは一般ユーザーとして起動し、Docker操作だけを内部でsudo実行します。
+
 設定ファイルの作成、コンテナの起動・停止、SSH トンネル、ログ確認などの手順は [`scripts/server/README.md`](scripts/server/README.md) を参照してください。
 
 ## marimo pair での Agent 接続

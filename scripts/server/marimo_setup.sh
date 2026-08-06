@@ -15,8 +15,8 @@ MARIMO_HOST_ADDRESS="127.0.0.1"
 # marimoコンテナ内の待受ポート。
 MARIMO_CONTAINER_PORT="2718"
 
-# Notebookリポジトリのclone先。
-MARIMO_WORKSPACE="/home/jsl_miwa/marimo_work/notebook-repository"
+# Notebookリポジトリのclone先。通常は自分のHOME配下にcloneする。
+MARIMO_WORKSPACE="${HOME}/marimo-notebooks"
 
 # 別チームが管理する生データのトップディレクトリ。
 MARIMO_RAW_DATA_DIR="/srv/benchmark/raw-data"
@@ -27,4 +27,3 @@ MARIMO_RAW_DATA_MOUNT="/data/raw"
 
 # 現在の環境で必要な場合に指定する。
 MARIMO_DNS_SERVER="172.20.1.10"
-

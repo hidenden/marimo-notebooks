@@ -25,6 +25,12 @@ DB_ENV_FILE="${MARIMO_DB_ENV:-${HOME}/.config/marimo/db.env}"
 
 DOCKER_COMMAND=(sudo docker)
 
+# sudo docker の実行前に、スクリプトを起動した利用者の ID を確定する。
+# スクリプト自体が sudo で起動された場合も元の利用者を使用する。
+MARIMO_RUN_UID="${SUDO_UID:-$(id -u)}"
+MARIMO_RUN_GID="${SUDO_GID:-$(id -g)}"
+MARIMO_RUN_GROUPS="$(id -G "${SUDO_USER:-$(id -un)}")"
+
 log() {
     printf '[marimo] %s\n' "$*"
 }
@@ -73,6 +79,9 @@ validate_configuration() {
 
     [[ -d "${MARIMO_WORKSPACE}" ]] ||
         die "Notebookワークスペースがありません: ${MARIMO_WORKSPACE}"
+
+    [[ -w "${MARIMO_WORKSPACE}" ]] ||
+        die "Notebookワークスペースへ書き込めません: ${MARIMO_WORKSPACE}"
 
     [[ -d "${MARIMO_RAW_DATA_DIR}" ]] ||
         die "生データディレクトリがありません: ${MARIMO_RAW_DATA_DIR}"
@@ -145,11 +154,16 @@ start_container() {
         die "ポート ${MARIMO_HOST_PORT} は既に使用されています"
     fi
 
+    local runtime_dir="${MARIMO_WORKDIR}/.marimo-runtime"
     local -a docker_args=(
         run
         --detach
         --name "${MARIMO_CONTAINER_NAME}"
         --restart unless-stopped
+
+        # イメージ内の固定ユーザーではなく、ホストの利用者として実行する。
+        --user
+        "${MARIMO_RUN_UID}:${MARIMO_RUN_GID}"
 
         # localhostだけに公開する。
         # PCからはSSHトンネル経由で接続する。
@@ -171,11 +185,39 @@ start_container() {
         --env
         "MARIMO_LOG_LEVEL=${MARIMO_LOG_LEVEL}"
 
+        # marimo、uv、一般的なCLIの書き込み先をworkspace内に限定する。
+        --env "MARIMO_RUNTIME_DIR=${runtime_dir}"
+        --env "HOME=${runtime_dir}/home"
+        --env "XDG_CACHE_HOME=${runtime_dir}/cache"
+        --env "XDG_CONFIG_HOME=${runtime_dir}/config"
+        --env "XDG_DATA_HOME=${runtime_dir}/data"
+        --env "XDG_STATE_HOME=${runtime_dir}/state"
+        --env "TMPDIR=${runtime_dir}/tmp"
+        --env "UV_CACHE_DIR=${runtime_dir}/cache/uv"
+        --env "UV_PROJECT_ENVIRONMENT=${MARIMO_WORKDIR}/.venv"
+        --env "UV_PYTHON_INSTALL_DIR=${runtime_dir}/data/uv/python"
+        --env "UV_PYTHON_BIN_DIR=${runtime_dir}/bin"
+        --env "UV_TOOL_DIR=${runtime_dir}/data/uv/tools"
+        --env "UV_TOOL_BIN_DIR=${runtime_dir}/bin"
+
         --workdir
         "${MARIMO_WORKDIR}"
 
         "${MARIMO_IMAGE}"
     )
+
+    # 共有データが補助グループで許可されている場合にもアクセスできるよう、
+    # ホスト利用者のグループをコンテナへ引き継ぐ。
+    local group_id
+    for group_id in ${MARIMO_RUN_GROUPS}; do
+        if [[ "${group_id}" != "${MARIMO_RUN_GID}" ]]; then
+            docker_args=(
+                "${docker_args[@]:0:${#docker_args[@]}-1}"
+                --group-add "${group_id}"
+                "${MARIMO_IMAGE}"
+            )
+        fi
+    done
 
     if [[ -n "${MARIMO_DNS_SERVER}" ]]; then
         # イメージ名の前にDockerオプションを挿入する。
@@ -192,6 +234,7 @@ start_container() {
     log "  port      : ${MARIMO_HOST_ADDRESS}:${MARIMO_HOST_PORT}"
     log "  workspace : ${MARIMO_WORKSPACE}"
     log "  raw data  : ${MARIMO_RAW_DATA_DIR}"
+    log "  uid:gid   : ${MARIMO_RUN_UID}:${MARIMO_RUN_GID}"
 
     "${DOCKER_COMMAND[@]}" "${docker_args[@]}" >/dev/null
 
