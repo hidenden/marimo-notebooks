@@ -12,7 +12,7 @@
 # 前提:
 #   - Dockerをsudo経由で実行できる
 #   - リポジトリ直下に .marimo-user.env が存在する
-#   - DB認証情報は .marimo-db.env からコンテナへ注入する
+#   - DB認証情報は利用者HOME配下のdb.envからコンテナへ注入する
 #
 
 set -Eeuo pipefail
@@ -21,7 +21,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
 USER_CONFIG_FILE="${MARIMO_USER_CONFIG:-${REPOSITORY_DIR}/.marimo-user.env}"
-DB_ENV_FILE="${MARIMO_DB_ENV:-${HOME}/.config/marimo/db.env}"
+USER_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
+DB_ENV_FILE="${MARIMO_DB_ENV:-${USER_CONFIG_HOME}/marimo-notebooks/db.env}"
 
 DOCKER_COMMAND=(sudo docker)
 
@@ -89,12 +90,23 @@ validate_configuration() {
     [[ -f "${DB_ENV_FILE}" ]] ||
         die "DB設定ファイルがありません: ${DB_ENV_FILE}"
 
-    # DB認証情報を他利用者から読まれにくくする。
-    local mode
+    # 利用者ごとのコピーを本人だけが読める状態にする。
+    local mode owner_uid config_dir config_dir_mode
     mode="$(stat -c '%a' "${DB_ENV_FILE}")"
+    owner_uid="$(stat -c '%u' "${DB_ENV_FILE}")"
+    config_dir="$(dirname -- "${DB_ENV_FILE}")"
+    config_dir_mode="$(stat -c '%a' "${config_dir}")"
 
     if [[ "${mode}" != "600" ]]; then
-        die "DB設定ファイルの権限を600にしてください: chmod 600 ${DB_ENV_FILE}"
+        die "DB設定ファイルの権限は600である必要があります: ${DB_ENV_FILE}"
+    fi
+
+    if [[ "${owner_uid}" != "${MARIMO_RUN_UID}" ]]; then
+        die "DB設定ファイルは実行ユーザー所有である必要があります: ${DB_ENV_FILE}"
+    fi
+
+    if [[ "${config_dir_mode}" != "700" ]]; then
+        die "DB設定ディレクトリの権限は700である必要があります: ${config_dir}"
     fi
 }
 
@@ -328,7 +340,7 @@ Environment:
                       default: ${REPOSITORY_DIR}/.marimo-user.env
 
   MARIMO_DB_ENV       DB接続設定ファイル
-                      default: ${HOME}/.config/marimo/db.env
+                      default: ${USER_CONFIG_HOME}/marimo-notebooks/db.env
 EOF
 }
 

@@ -13,7 +13,7 @@
 - 管理者から案内された marimo Docker イメージ
 - Notebook リポジトリの clone
 - 共有生データディレクトリへの読み取り権限
-- PostgreSQL を利用する場合は、接続先ネットワークへの到達性と認証情報
+- PostgreSQL への到達性と、管理者から案内された共通DB設定値
 
 操作スクリプト自体は一般ユーザーとして実行してください。スクリプト内部の `sudo docker` だけがsudoを使用します。
 
@@ -49,19 +49,21 @@ cp config/marimo-user.env.example .marimo-user.env
 
 `scripts/server/marimo_setup.sh` には利用者設定の記入例が置かれていますが、現状は設定ファイルを自動生成する処理ではありません。通常は実行せず、上記の `config/marimo-user.env.example` から `.marimo-user.env` を作成してください。
 
-### 2. DB 接続設定を作成する
+### 2. DB接続設定をHOME配下へ配置する
 
-DB 接続設定はリポジトリ外の `~/.config/marimo/db.env` に配置します。
+各利用者は、踏み台サーバーの `${XDG_CONFIG_HOME:-$HOME/.config}/marimo-notebooks/db.env` にDB接続設定を配置します。`XDG_CONFIG_HOME` が未設定なら `~/.config/marimo-notebooks/db.env` です。ファイルは利用者ごとに分かれますが、管理者から案内された同じ参照専用DBユーザーの値を設定します。
 
 ```bash
-mkdir -p ~/.config/marimo
-cp config/db.env.example ~/.config/marimo/db.env
-chmod 600 ~/.config/marimo/db.env
+MARIMO_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/marimo-notebooks"
+install -d -m 700 "${MARIMO_CONFIG_DIR}"
+install -m 600 \
+  config/db.env.example "${MARIMO_CONFIG_DIR}/db.env"
+${EDITOR:-vi} "${MARIMO_CONFIG_DIR}/db.env"
 ```
 
-`~/.config/marimo/db.env` を開き、管理者から案内された接続情報を設定してください。特に `BENCHMARK_DB_HOST`、`BENCHMARK_DB_NAME`、`BENCHMARK_DB_USER`、`BENCHMARK_DB_PASSWORD` を確認します。認証情報は Git に登録しないでください。
+`BENCHMARK_DB_HOST`、`BENCHMARK_DB_NAME`、`BENCHMARK_DB_USER`、`BENCHMARK_DB_PASSWORD` を実際の共通接続情報へ変更します。`docker run --env-file` では引用符も値の一部になるため、値を `"` で囲まないでください。実際の認証情報はGitへ登録しません。
 
-スクリプトは DB 設定ファイルの権限が厳密に `600` でない場合、処理を中止します。
+スクリプトはディレクトリが `700`、ファイルが実行ユーザー所有かつ `600` でない場合、処理を中止します。スクリプト内部の `sudo docker run --env-file ~/.config/marimo-notebooks/db.env` が設定をコンテナへ渡します。
 
 ### 3. パスと Docker を確認する
 
@@ -130,9 +132,9 @@ PC 側の `2718` が使用中の場合は、未使用のポート（例: `12718`
 
 `stop` と `remove` は異なります。`stop` はコンテナを残し、`remove` はコンテナ自体を削除します。どちらの場合も、Notebook は `MARIMO_WORKSPACE` に保存されているため削除されません。
 
-## 設定ファイルを別の場所に置く場合
+## DB設定を別の場所に置く場合
 
-既定のパスを使えない場合は、実行時にファイルの絶対パスを指定できます。
+既定のHOME配下を使えない場合は、利用者が別の絶対パスを指定できます。指定先も実行ユーザー所有で、親ディレクトリ `700`、ファイル `600` である必要があります。
 
 ```bash
 MARIMO_USER_CONFIG=/path/to/user.env \
@@ -143,8 +145,8 @@ MARIMO_DB_ENV=/path/to/db.env \
 ## トラブルシューティング
 
 - `利用者設定ファイルがありません`: リポジトリ直下に `.marimo-user.env` を作成したか、`MARIMO_USER_CONFIG` のパスを確認します。
-- `DB設定ファイルがありません`: `~/.config/marimo/db.env` を作成したか、`MARIMO_DB_ENV` のパスを確認します。
-- `DB設定ファイルの権限を600にしてください`: `chmod 600 ~/.config/marimo/db.env` を実行します。
+- `DB設定ファイルがありません`: `~/.config/marimo-notebooks/db.env` を配置したか確認します。
+- DB設定ファイルの所有者・権限エラー: `chmod 700 ~/.config/marimo-notebooks` と `chmod 600 ~/.config/marimo-notebooks/db.env` を実行します。
 - `ポート ... は既に使用されています`: 管理者に未使用ポートを確認し、`MARIMO_HOST_PORT` を変更します。
 - コンテナが起動しない: `./scripts/server/marimo_run.sh logs` と `sudo docker ps -a` で状態を確認します。
 - Notebookや`.venv`がroot所有になる: スクリプト全体をsudo化した独自ラッパーを使っていないか確認し、コンテナの `Config.User` が自分の `id -u:id -g` になっているか確認します。
