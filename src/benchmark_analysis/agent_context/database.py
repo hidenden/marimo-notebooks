@@ -26,3 +26,8 @@ def get_database_context() -> dict[str, object]:
             "データベースは参照専用として扱ってください。",
         ],
     }
+
+
+def hello_sample() -> str:
+    """サンプル関数。"""
+    return "Hello, sample!"
