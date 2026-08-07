@@ -12,6 +12,15 @@ FORCE=false
 CHECK_ONLY=false
 TEMP_FILES=()
 
+# macOSではDocker Desktop/OrbStackのユーザーソケットを使うためsudoを付けない。
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    IS_MACOS=true
+    DOCKER_COMMAND=(docker)
+else
+    IS_MACOS=false
+    DOCKER_COMMAND=(sudo docker)
+fi
+
 log() {
     printf '[marimo-setup] %s\n' "$*"
 }
@@ -79,16 +88,45 @@ check_prerequisites() {
         die "このスクリプトはsudoを付けず、一般ユーザーとして実行してください"
 
     local command
-    for command in sudo docker ss stat sort grep sed mktemp install cp date id; do
+    for command in docker stat sort grep sed mktemp install cp date id uname; do
         require_command "${command}"
     done
 
-    stat -c '%a' "${REPOSITORY_DIR}" >/dev/null 2>&1 ||
-        die "GNU statが必要です"
+    if [[ "${IS_MACOS}" == true ]]; then
+        # macOSにはssがないため、ポート確認には標準搭載のlsofを使用する。
+        require_command lsof
+        stat -f '%Lp' "${REPOSITORY_DIR}" >/dev/null 2>&1 ||
+            die "macOSのstatを実行できません"
+    else
+        require_command sudo
+        require_command ss
+        stat -c '%a' "${REPOSITORY_DIR}" >/dev/null 2>&1 ||
+            die "GNU statが必要です"
+    fi
 
     log "Dockerへのアクセスを確認します"
-    sudo docker info >/dev/null ||
-        die "sudo dockerを実行できません"
+    "${DOCKER_COMMAND[@]}" info >/dev/null ||
+        die "Dockerを実行できません"
+}
+
+file_mode() {
+    local file="$1"
+    if [[ "${IS_MACOS}" == true ]]; then
+        # macOSのBSD statでは-fを使用する。
+        stat -f '%Lp' "${file}"
+    else
+        stat -c '%a' "${file}"
+    fi
+}
+
+file_owner_uid() {
+    local file="$1"
+    if [[ "${IS_MACOS}" == true ]]; then
+        # macOSのBSD statでは-fを使用する。
+        stat -f '%u' "${file}"
+    else
+        stat -c '%u' "${file}"
+    fi
 }
 
 prompt_value() {
@@ -143,7 +181,7 @@ reject_newline() {
 latest_local_image() {
     local tag
     tag="$({
-        sudo docker image ls "${IMAGE_REPOSITORY}" \
+        "${DOCKER_COMMAND[@]}" image ls "${IMAGE_REPOSITORY}" \
             --format '{{.Tag}}' 2>/dev/null || true
     } | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
 
@@ -283,16 +321,26 @@ validate_port() {
     ((MARIMO_HOST_PORT >= 1024 && MARIMO_HOST_PORT <= 65535)) ||
         die "MARIMO_HOST_PORTは1024～65535の範囲で指定してください"
 
-    if ss -H -ltn "sport = :${MARIMO_HOST_PORT}" 2>/dev/null | grep -q .; then
+    if port_is_listening "${MARIMO_HOST_PORT}"; then
         local container_port="${MARIMO_CONTAINER_PORT:-2718}"
-        if sudo docker container inspect "${MARIMO_CONTAINER_NAME}" \
+        if "${DOCKER_COMMAND[@]}" container inspect "${MARIMO_CONTAINER_NAME}" \
             --format '{{.State.Running}}' 2>/dev/null | grep -qx true &&
-            sudo docker port "${MARIMO_CONTAINER_NAME}" "${container_port}/tcp" \
+            "${DOCKER_COMMAND[@]}" port "${MARIMO_CONTAINER_NAME}" "${container_port}/tcp" \
                 2>/dev/null | grep -qE ":${MARIMO_HOST_PORT}$"; then
             log "設定済みコンテナがポート${MARIMO_HOST_PORT}を使用中です"
         else
             die "ポート${MARIMO_HOST_PORT}は既に使用されています"
         fi
+    fi
+}
+
+port_is_listening() {
+    local port="$1"
+    if [[ "${IS_MACOS}" == true ]]; then
+        # macOSにはssがないためlsofでTCPのLISTENソケットを確認する。
+        lsof -nP -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null | grep -q .
+    else
+        ss -H -ltn "sport = :${port}" 2>/dev/null | grep -q .
     fi
 }
 
@@ -319,8 +367,8 @@ validate_configuration() {
         die "共有生データディレクトリが存在しないか、読めません: ${MARIMO_RAW_DATA_DIR}"
 
     local db_mode db_owner
-    db_mode="$(stat -c '%a' "${DB_ENV_FILE}")"
-    db_owner="$(stat -c '%u' "${DB_ENV_FILE}")"
+    db_mode="$(file_mode "${DB_ENV_FILE}")"
+    db_owner="$(file_owner_uid "${DB_ENV_FILE}")"
     [[ "${db_mode}" == "600" ]] || die "db.envの権限は600にしてください"
     [[ "${db_owner}" == "$(id -u)" ]] || die "db.envは実行ユーザー所有にしてください"
 
@@ -333,10 +381,10 @@ validate_configuration() {
     done
 
     log "Dockerイメージを確認します: ${MARIMO_IMAGE}"
-    sudo docker image inspect "${MARIMO_IMAGE}" >/dev/null ||
+    "${DOCKER_COMMAND[@]}" image inspect "${MARIMO_IMAGE}" >/dev/null ||
         die "Dockerイメージが見つかりません: ${MARIMO_IMAGE}"
 
-    if sudo docker container inspect "${MARIMO_CONTAINER_NAME}" >/dev/null 2>&1; then
+    if "${DOCKER_COMMAND[@]}" container inspect "${MARIMO_CONTAINER_NAME}" >/dev/null 2>&1; then
         log "同名のコンテナが既に存在します: ${MARIMO_CONTAINER_NAME}"
     fi
 

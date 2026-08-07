@@ -23,9 +23,16 @@ REPOSITORY_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 USER_CONFIG_FILE="${MARIMO_USER_CONFIG:-${REPOSITORY_DIR}/.marimo-user.env}"
 DB_ENV_FILE="${MARIMO_DB_ENV:-${REPOSITORY_DIR}/db.env}"
 
-DOCKER_COMMAND=(sudo docker)
+# macOSではDocker Desktop/OrbStackのユーザーソケットを使うためsudoを付けない。
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    IS_MACOS=true
+    DOCKER_COMMAND=(docker)
+else
+    IS_MACOS=false
+    DOCKER_COMMAND=(sudo docker)
+fi
 
-# sudo docker の実行前に、スクリプトを起動した利用者の ID を確定する。
+# Docker実行前に、スクリプトを起動した利用者の ID を確定する。
 # スクリプト自体が sudo で起動された場合も元の利用者を使用する。
 MARIMO_RUN_UID="${SUDO_UID:-$(id -u)}"
 MARIMO_RUN_GID="${SUDO_GID:-$(id -g)}"
@@ -47,6 +54,26 @@ die() {
 require_command() {
     command -v "$1" >/dev/null 2>&1 ||
         die "必要なコマンドが見つかりません: $1"
+}
+
+file_mode() {
+    local file="$1"
+    if [[ "${IS_MACOS}" == true ]]; then
+        # macOSのBSD statでは-fを使用する。
+        stat -f '%Lp' "${file}"
+    else
+        stat -c '%a' "${file}"
+    fi
+}
+
+file_owner_uid() {
+    local file="$1"
+    if [[ "${IS_MACOS}" == true ]]; then
+        # macOSのBSD statでは-fを使用する。
+        stat -f '%u' "${file}"
+    else
+        stat -c '%u' "${file}"
+    fi
 }
 
 load_user_config() {
@@ -91,8 +118,8 @@ validate_configuration() {
 
     # 利用者ごとのコピーを本人だけが読める状態にする。
     local mode owner_uid
-    mode="$(stat -c '%a' "${DB_ENV_FILE}")"
-    owner_uid="$(stat -c '%u' "${DB_ENV_FILE}")"
+    mode="$(file_mode "${DB_ENV_FILE}")"
+    owner_uid="$(file_owner_uid "${DB_ENV_FILE}")"
 
     if [[ "${mode}" != "600" ]]; then
         die "DB設定ファイルの権限は600である必要があります: ${DB_ENV_FILE}"
@@ -118,9 +145,14 @@ container_running() {
 }
 
 port_is_listening() {
-    # ssが利用できることを前提とする。
-    ss -H -ltn "sport = :${MARIMO_HOST_PORT}" 2>/dev/null |
-        grep -q .
+    if [[ "${IS_MACOS}" == true ]]; then
+        # macOSにはssがないためlsofでTCPのLISTENソケットを確認する。
+        lsof -nP -iTCP:"${MARIMO_HOST_PORT}" -sTCP:LISTEN 2>/dev/null |
+            grep -q .
+    else
+        ss -H -ltn "sport = :${MARIMO_HOST_PORT}" 2>/dev/null |
+            grep -q .
+    fi
 }
 
 print_connection_info() {
@@ -337,10 +369,16 @@ EOF
 }
 
 main() {
-    require_command sudo
     require_command docker
-    require_command ss
     require_command stat
+    require_command uname
+    if [[ "${IS_MACOS}" == true ]]; then
+        # macOS用の隠し開発機能としてlsofを使用する。
+        require_command lsof
+    else
+        require_command sudo
+        require_command ss
+    fi
 
     load_user_config
     validate_configuration
