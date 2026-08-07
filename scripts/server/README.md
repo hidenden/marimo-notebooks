@@ -25,13 +25,22 @@
 
 ### 1. 利用者設定を作成する
 
-設定例をリポジトリ直下の `.marimo-user.env` にコピーします。
+セットアップスクリプトを一般ユーザーとして実行します。Docker操作に必要な場合だけ、スクリプト内部で `sudo` を使用します。
 
 ```bash
-cp config/marimo-user.env.example .marimo-user.env
+./scripts/server/marimo_setup.sh
 ```
 
-`.marimo-user.env` を開き、少なくとも次の値を利用環境に合わせて変更してください。
+スクリプトはローカルに登録された `marimo-image` のうち、`latest` 以外の最新バージョンをDockerイメージの推奨値として表示します。利用者固有のコンテナ名とポート、各ディレクトリなどを対話形式で確認し、リポジトリ直下に `.marimo-user.env` を作成します。
+
+既存の設定がある場合は上書きせず、その設定を検証します。設定を作り直す場合は `--force`、変更せず検証だけ行う場合は `--check` を使用します。`--force` では既存ファイルの日時付きバックアップを作成します。
+
+```bash
+./scripts/server/marimo_setup.sh --check
+./scripts/server/marimo_setup.sh --force
+```
+
+`.marimo-user.env` には次の値が保存されます。
 
 | 変数 | 必須 | 説明 |
 | --- | --- | --- |
@@ -47,33 +56,19 @@ cp config/marimo-user.env.example .marimo-user.env
 | `MARIMO_DNS_SERVER` | 任意 | コンテナで明示的な DNS が必要な場合に指定 |
 | `MARIMO_LOG_LEVEL` | 任意 | marimo のログレベル。既定値は `info` |
 
-`MARIMO_CONTAINER_NAME` と `MARIMO_HOST_PORT` は利用者間で重複しない値を管理者に確認してください。`.marimo-user.env` は Git の管理対象外です。
-
-`scripts/server/marimo_setup.sh` には利用者設定の記入例が置かれていますが、現状は設定ファイルを自動生成する処理ではありません。通常は実行せず、上記の `config/marimo-user.env.example` から `.marimo-user.env` を作成してください。
+`MARIMO_CONTAINER_NAME` と `MARIMO_HOST_PORT` は利用者間で重複しない値を管理者に確認してください。`.marimo-user.env` は Git の管理対象外です。`MARIMO_HOST_ADDRESS` は外部公開を防ぐため、セットアップスクリプトが `127.0.0.1` に固定します。
 
 ### 2. DB接続設定をリポジトリ直下へ配置する
 
-各利用者は、cloneしたリポジトリの直下に `db.env` を配置します。ファイルは利用者ごとに分かれますが、管理者から案内された同じ参照専用DBユーザーの値を設定します。
+セットアップスクリプトが共通の参照専用DB接続情報を対話形式で確認し、cloneしたリポジトリの直下に `db.env` を作成します。DBパスワードの入力内容は画面に表示されません。
 
-```bash
-install -m 600 config/db.env.example db.env
-${EDITOR:-vi} db.env
-```
-
-`BENCHMARK_DB_HOST`、`BENCHMARK_DB_NAME`、`BENCHMARK_DB_USER`、`BENCHMARK_DB_PASSWORD` を実際の共通接続情報へ変更します。`docker run --env-file` では引用符も値の一部になるため、値を `"` で囲まないでください。実際の認証情報はGitへ登録しません。
+`BENCHMARK_DB_HOST`、`BENCHMARK_DB_NAME`、`BENCHMARK_DB_USER`、`BENCHMARK_DB_PASSWORD` には実際の共通接続情報を入力します。スクリプトが `docker run --env-file` で利用できる形式で保存します。実際の認証情報はGitへ登録しません。
 
 スクリプトはファイルが実行ユーザー所有かつ `600` でない場合、処理を中止します。スクリプト内部の `sudo docker run --env-file db.env` が設定をコンテナへ渡します。`db.env` は `.gitignore` の対象であり、Gitへ登録しません。
 
 ### 3. パスと Docker を確認する
 
-```bash
-source .marimo-user.env
-test -d "${MARIMO_WORKSPACE}"
-test -d "${MARIMO_RAW_DATA_DIR}"
-sudo docker image inspect "${MARIMO_IMAGE}"
-```
-
-各コマンドが成功することを確認してください。また、`MARIMO_HOST_PORT` が他の利用者に使われていないことを確認してください。起動時にもスクリプトがポートの使用状況を検査します。
+セットアップスクリプトは、ワークスペースと共有生データのアクセス、利用者固有ポート、DB設定ファイルの所有者と権限、Dockerイメージを検証します。すべての検証に成功すると、marimo-pairの接続先、VS Codeで転送するポート、次に実行するコマンドを表示します。
 
 ## 起動
 
