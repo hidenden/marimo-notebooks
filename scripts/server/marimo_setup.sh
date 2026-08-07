@@ -1,6 +1,6 @@
 # 使用する共通Dockerイメージ。
 # latestは使わず、検証済みバージョンを明示する。
-MARIMO_IMAGE="marimo-poc:0.1.0"
+MARIMO_IMAGE="marimo-image:0.1.0"
 
 # 利用者固有のコンテナ名。
 MARIMO_CONTAINER_NAME="marimo-jsl-miwa"

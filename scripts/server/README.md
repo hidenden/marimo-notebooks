@@ -70,7 +70,7 @@ ${EDITOR:-vi} "${MARIMO_CONFIG_DIR}/db.env"
 ```bash
 test -d "$(pwd)"
 test -d /設定した/MARIMO_RAW_DATA_DIR
-sudo docker image inspect marimo-poc:0.1.0
+sudo docker image inspect marimo-image:0.1.0
 ```
 
 最後の2つは `.marimo-user.env` に設定したディレクトリとイメージ名に置き換えてください。また、`MARIMO_HOST_PORT` が他の利用者に使われていないことを確認してください。起動時にもスクリプトがポートの使用状況を検査します。
