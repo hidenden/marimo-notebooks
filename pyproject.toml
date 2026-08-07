@@ -12,7 +12,7 @@ license = { text = "Proprietary" }
 
 dependencies = [
     # Notebook environment
-    "marimo>=0.17,<1",
+    "marimo>=0.23,<1",
 
     # DataFrames and data interchange
     "polars>=1.30,<2",

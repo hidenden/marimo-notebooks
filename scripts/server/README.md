@@ -17,6 +17,8 @@
 
 操作スクリプト自体は一般ユーザーとして実行してください。スクリプト内部の `sudo docker` だけがsudoを使用します。
 
+最新のmarimoイメージは `--no-token` で起動するため、marimo自体のトークン認証は無効です。ポートは必ず踏み台サーバーのlocalhostだけに公開し、利用者PCからはSSHトンネル経由で接続してください。
+
 以降のコマンドは、特記がない限りリポジトリのルートで実行します。
 
 ## 初回準備
@@ -86,6 +88,7 @@ sudo docker image inspect marimo-image:0.1.0
 - ワークスペースをコンテナの `MARIMO_WORKDIR` へ読み書き可能でマウント
 - コンテナをスクリプト実行者と同じ数値UID/GID（補助グループを含む）で実行
 - HOME、XDG、uv、TMPDIRの書き込み先を `/workspace/.marimo-runtime` と `/workspace/.venv` に限定
+- 実際のコンテナ内ポートとマウント先を `MARIMO_PORT`、`MARIMO_WORKSPACE`、`MARIMO_RAW_DATA_DIR` としてイメージへ通知
 - 共有生データを `MARIMO_RAW_DATA_MOUNT` へ読み取り専用でマウント
 - DB 接続設定を環境変数としてコンテナへ注入
 - 指定ポートを `127.0.0.1` に公開

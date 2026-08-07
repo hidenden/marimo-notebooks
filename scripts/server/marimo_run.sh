@@ -143,6 +143,10 @@ Example SSH tunnel from the client PC:
 Browser URL:
   http://localhost:2718
 
+Authentication:
+  marimo token authentication is disabled.
+  Access this endpoint only through the SSH tunnel.
+
 Copilot Agentへの指示例:
   localhost:2718 で動作している marimo-pair に接続し、
   現在開いているNotebookの状態を確認してください。
@@ -197,20 +201,12 @@ start_container() {
         --env
         "MARIMO_LOG_LEVEL=${MARIMO_LOG_LEVEL}"
 
-        # marimo、uv、一般的なCLIの書き込み先をworkspace内に限定する。
+        # 最新のmarimo-image entrypointへ実際のマウント先と待受ポートを渡す。
+        # HOME、XDG、uv、TMPDIRの配置はイメージ側でworkspace配下に設定される。
+        --env "MARIMO_PORT=${MARIMO_CONTAINER_PORT}"
+        --env "MARIMO_WORKSPACE=${MARIMO_WORKDIR}"
+        --env "MARIMO_RAW_DATA_DIR=${MARIMO_RAW_DATA_MOUNT}"
         --env "MARIMO_RUNTIME_DIR=${runtime_dir}"
-        --env "HOME=${runtime_dir}/home"
-        --env "XDG_CACHE_HOME=${runtime_dir}/cache"
-        --env "XDG_CONFIG_HOME=${runtime_dir}/config"
-        --env "XDG_DATA_HOME=${runtime_dir}/data"
-        --env "XDG_STATE_HOME=${runtime_dir}/state"
-        --env "TMPDIR=${runtime_dir}/tmp"
-        --env "UV_CACHE_DIR=${runtime_dir}/cache/uv"
-        --env "UV_PROJECT_ENVIRONMENT=${MARIMO_WORKDIR}/.venv"
-        --env "UV_PYTHON_INSTALL_DIR=${runtime_dir}/data/uv/python"
-        --env "UV_PYTHON_BIN_DIR=${runtime_dir}/bin"
-        --env "UV_TOOL_DIR=${runtime_dir}/data/uv/tools"
-        --env "UV_TOOL_BIN_DIR=${runtime_dir}/bin"
 
         --workdir
         "${MARIMO_WORKDIR}"
