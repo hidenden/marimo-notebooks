@@ -14,7 +14,6 @@
 | `tests/` | 共通パッケージなどのテスト |
 | `config/` | 利用者設定・DB 接続設定のサンプル |
 | `scripts/server/` | 踏み台サーバー上の marimo コンテナ管理スクリプト |
-| `scripts/client/` | クライアント側スクリプト用ディレクトリ |
 | `docs/` | プロジェクト文書 |
 
 Notebook の配置ルールについては、[`notebooks/samples/README.md`](notebooks/samples/README.md) と [`notebooks/users/README.md`](notebooks/users/README.md) も参照してください。
