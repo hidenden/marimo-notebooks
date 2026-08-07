@@ -5,9 +5,9 @@ MARIMO_IMAGE="marimo-image:0.1.0"
 # 利用者固有のコンテナ名。
 MARIMO_CONTAINER_NAME="marimo-jsl-miwa"
 
-# 踏み台サーバー側のポート。
-# 将来的にはsetupスクリプトで自動割当してもよい。
-MARIMO_HOST_PORT="2718"
+# 管理者から割り当てられた利用者固有のポート。
+# marimo-pairの接続先と、VS Codeで転送するローカル側にも同じ番号を使う。
+MARIMO_HOST_PORT="12718"
 
 # コンテナは踏み台のlocalhostにのみ公開する。
 MARIMO_HOST_ADDRESS="127.0.0.1"

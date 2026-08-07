@@ -12,7 +12,7 @@
 # 前提:
 #   - Dockerをsudo経由で実行できる
 #   - リポジトリ直下に .marimo-user.env が存在する
-#   - DB認証情報は利用者HOME配下のdb.envからコンテナへ注入する
+#   - DB認証情報はリポジトリ直下のdb.envからコンテナへ注入する
 #
 
 set -Eeuo pipefail
@@ -21,8 +21,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
 USER_CONFIG_FILE="${MARIMO_USER_CONFIG:-${REPOSITORY_DIR}/.marimo-user.env}"
-USER_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
-DB_ENV_FILE="${MARIMO_DB_ENV:-${USER_CONFIG_HOME}/marimo-notebooks/db.env}"
+DB_ENV_FILE="${MARIMO_DB_ENV:-${REPOSITORY_DIR}/db.env}"
 
 DOCKER_COMMAND=(sudo docker)
 
@@ -91,11 +90,9 @@ validate_configuration() {
         die "DB設定ファイルがありません: ${DB_ENV_FILE}"
 
     # 利用者ごとのコピーを本人だけが読める状態にする。
-    local mode owner_uid config_dir config_dir_mode
+    local mode owner_uid
     mode="$(stat -c '%a' "${DB_ENV_FILE}")"
     owner_uid="$(stat -c '%u' "${DB_ENV_FILE}")"
-    config_dir="$(dirname -- "${DB_ENV_FILE}")"
-    config_dir_mode="$(stat -c '%a' "${config_dir}")"
 
     if [[ "${mode}" != "600" ]]; then
         die "DB設定ファイルの権限は600である必要があります: ${DB_ENV_FILE}"
@@ -105,9 +102,6 @@ validate_configuration() {
         die "DB設定ファイルは実行ユーザー所有である必要があります: ${DB_ENV_FILE}"
     fi
 
-    if [[ "${config_dir_mode}" != "700" ]]; then
-        die "DB設定ディレクトリの権限は700である必要があります: ${config_dir}"
-    fi
 }
 
 container_exists() {
@@ -132,24 +126,26 @@ port_is_listening() {
 print_connection_info() {
     cat <<EOF
 
-marimo is available through an SSH tunnel.
+marimo is available on the jump host.
 
-Remote endpoint:
-  ${MARIMO_HOST_ADDRESS}:${MARIMO_HOST_PORT}
+marimo-pair endpoint for the remote Copilot Agent:
+  http://localhost:${MARIMO_HOST_PORT}
 
-Example SSH tunnel from the client PC:
-  ssh -N -L 2718:${MARIMO_HOST_ADDRESS}:${MARIMO_HOST_PORT} $(whoami)@<jump-host>
+VS Code port forwarding for the client browser:
+  remote port: ${MARIMO_HOST_PORT}
+  local port:  ${MARIMO_HOST_PORT}
 
-Browser URL:
-  http://localhost:2718
+Browser URL on the client PC:
+  http://localhost:${MARIMO_HOST_PORT}
 
 Authentication:
   marimo token authentication is disabled.
-  Access this endpoint only through the SSH tunnel.
+  Keep the endpoint bound to localhost and use VS Code port forwarding.
 
 Copilot Agentへの指示例:
-  localhost:2718 で動作している marimo-pair に接続し、
-  現在開いているNotebookの状態を確認してください。
+  /marimo-pair http://localhost:${MARIMO_HOST_PORT} の既存セッションで
+  <ノートブックファイル名> を pair してください。
+  新しい marimo サーバーは起動しないでください。
 
 EOF
 }
@@ -182,7 +178,7 @@ start_container() {
         "${MARIMO_RUN_UID}:${MARIMO_RUN_GID}"
 
         # localhostだけに公開する。
-        # PCからはSSHトンネル経由で接続する。
+        # PCのブラウザーからはVS Code Remoteのポート転送経由で接続する。
         --publish
         "${MARIMO_HOST_ADDRESS}:${MARIMO_HOST_PORT}:${MARIMO_CONTAINER_PORT}"
 
@@ -336,7 +332,7 @@ Environment:
                       default: ${REPOSITORY_DIR}/.marimo-user.env
 
   MARIMO_DB_ENV       DB接続設定ファイル
-                      default: ${USER_CONFIG_HOME}/marimo-notebooks/db.env
+                      default: ${REPOSITORY_DIR}/db.env
 EOF
 }
 

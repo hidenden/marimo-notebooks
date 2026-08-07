@@ -1,6 +1,6 @@
 # marimo サーバーの準備と実行
 
-`scripts/server/marimo_run.sh` は、踏み台サーバー上で利用者ごとの marimo Docker コンテナを起動・停止するためのスクリプトです。コンテナのポートは踏み台サーバーの localhost にだけ公開されるため、利用者の PC からは SSH トンネルを経由して接続します。
+`scripts/server/marimo_run.sh` は、踏み台サーバー上で利用者ごとの marimo Docker コンテナを起動・停止するためのスクリプトです。利用者はVS Code Remoteで踏み台サーバーへ接続し、リモート側のGitHub Copilot Agentと、VS Codeのポート転送を利用します。
 
 ## 前提条件
 
@@ -17,7 +17,7 @@
 
 操作スクリプト自体は一般ユーザーとして実行してください。スクリプト内部の `sudo docker` だけがsudoを使用します。
 
-最新のmarimoイメージは `--no-token` で起動するため、marimo自体のトークン認証は無効です。ポートは必ず踏み台サーバーのlocalhostだけに公開し、利用者PCからはSSHトンネル経由で接続してください。
+最新のmarimoイメージは `--no-token` で起動するため、marimo自体のトークン認証は無効です。ポートは必ず踏み台サーバーのlocalhostだけに公開し、利用者PCのブラウザーからはVS Code Remoteのポート転送経由で接続してください。
 
 以降のコマンドは、特記がない限りリポジトリのルートで実行します。
 
@@ -37,7 +37,7 @@ cp config/marimo-user.env.example .marimo-user.env
 | --- | --- | --- |
 | `MARIMO_IMAGE` | 必須 | 管理者から指定された Docker イメージ。`latest` ではなく検証済みバージョンを指定します。 |
 | `MARIMO_CONTAINER_NAME` | 必須 | 他の利用者と重複しないコンテナ名 |
-| `MARIMO_HOST_PORT` | 必須 | 踏み台サーバー側の利用者固有ポート（1024～65535） |
+| `MARIMO_HOST_PORT` | 必須 | 管理者から割り当てられた利用者固有ポート（1024～65535）。marimo-pairの接続先と、VS Codeで転送するローカル側にも同じ番号を使用 |
 | `MARIMO_WORKSPACE` | 必須 | このリポジトリを自分のHOME配下へcloneしたディレクトリの絶対パス。`${HOME}/marimo-notebooks` を推奨 |
 | `MARIMO_RAW_DATA_DIR` | 必須 | 共有生データディレクトリの絶対パス |
 | `MARIMO_HOST_ADDRESS` | 任意 | 公開アドレス。既定値は安全のため `127.0.0.1` |
@@ -51,31 +51,29 @@ cp config/marimo-user.env.example .marimo-user.env
 
 `scripts/server/marimo_setup.sh` には利用者設定の記入例が置かれていますが、現状は設定ファイルを自動生成する処理ではありません。通常は実行せず、上記の `config/marimo-user.env.example` から `.marimo-user.env` を作成してください。
 
-### 2. DB接続設定をHOME配下へ配置する
+### 2. DB接続設定をリポジトリ直下へ配置する
 
-各利用者は、踏み台サーバーの `${XDG_CONFIG_HOME:-$HOME/.config}/marimo-notebooks/db.env` にDB接続設定を配置します。`XDG_CONFIG_HOME` が未設定なら `~/.config/marimo-notebooks/db.env` です。ファイルは利用者ごとに分かれますが、管理者から案内された同じ参照専用DBユーザーの値を設定します。
+各利用者は、cloneしたリポジトリの直下に `db.env` を配置します。ファイルは利用者ごとに分かれますが、管理者から案内された同じ参照専用DBユーザーの値を設定します。
 
 ```bash
-MARIMO_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/marimo-notebooks"
-install -d -m 700 "${MARIMO_CONFIG_DIR}"
-install -m 600 \
-  config/db.env.example "${MARIMO_CONFIG_DIR}/db.env"
-${EDITOR:-vi} "${MARIMO_CONFIG_DIR}/db.env"
+install -m 600 config/db.env.example db.env
+${EDITOR:-vi} db.env
 ```
 
 `BENCHMARK_DB_HOST`、`BENCHMARK_DB_NAME`、`BENCHMARK_DB_USER`、`BENCHMARK_DB_PASSWORD` を実際の共通接続情報へ変更します。`docker run --env-file` では引用符も値の一部になるため、値を `"` で囲まないでください。実際の認証情報はGitへ登録しません。
 
-スクリプトはディレクトリが `700`、ファイルが実行ユーザー所有かつ `600` でない場合、処理を中止します。スクリプト内部の `sudo docker run --env-file ~/.config/marimo-notebooks/db.env` が設定をコンテナへ渡します。
+スクリプトはファイルが実行ユーザー所有かつ `600` でない場合、処理を中止します。スクリプト内部の `sudo docker run --env-file db.env` が設定をコンテナへ渡します。`db.env` は `.gitignore` の対象であり、Gitへ登録しません。
 
 ### 3. パスと Docker を確認する
 
 ```bash
-test -d "$(pwd)"
-test -d /設定した/MARIMO_RAW_DATA_DIR
-sudo docker image inspect marimo-image:0.1.0
+source .marimo-user.env
+test -d "${MARIMO_WORKSPACE}"
+test -d "${MARIMO_RAW_DATA_DIR}"
+sudo docker image inspect "${MARIMO_IMAGE}"
 ```
 
-最後の2つは `.marimo-user.env` に設定したディレクトリとイメージ名に置き換えてください。また、`MARIMO_HOST_PORT` が他の利用者に使われていないことを確認してください。起動時にもスクリプトがポートの使用状況を検査します。
+各コマンドが成功することを確認してください。また、`MARIMO_HOST_PORT` が他の利用者に使われていないことを確認してください。起動時にもスクリプトがポートの使用状況を検査します。
 
 ## 起動
 
@@ -105,21 +103,40 @@ sudo docker run --user <利用者UID>:<利用者GID> \
 
 このためNotebook、`.venv`、marimo設定、uvキャッシュはホスト側でも利用者自身の所有となり、root所有のファイルは作られません。共有生データをUnixの補助グループで読める利用者については、そのグループIDも `--group-add` で引き継がれます。
 
-## PC から接続する
+## VS Code Remoteから接続する
 
-利用者の PC で SSH トンネルを開始します。次の例の最初の `2718` は PC 側のポート、2つ目は `.marimo-user.env` の `MARIMO_HOST_PORT` です。
+利用者PCのVS CodeからRemote SSHで踏み台サーバーへ接続し、このリポジトリを開きます。VS Code Server、ターミナル、GitHub Copilot Agentは踏み台サーバー上で動作します。
 
-```bash
-ssh -N -L 2718:127.0.0.1:<MARIMO_HOST_PORT> <ユーザー名>@<踏み台ホスト>
-```
-
-トンネルを実行しているターミナルを開いたまま、ブラウザーで次の URL にアクセスします。
+リモート側のターミナルでコンテナを起動します。
 
 ```text
-http://localhost:2718
+./scripts/server/marimo_run.sh start
 ```
 
-PC 側の `2718` が使用中の場合は、未使用のポート（例: `12718`）に変更し、ブラウザーでも同じポートを使います。
+### marimo-pairで接続する
+
+リモート側のGitHub Copilot Agentに次のように指示します。`<MARIMO_HOST_PORT>` は `.marimo-user.env` の値へ置き換えてください。
+
+```text
+/marimo-pair http://localhost:<MARIMO_HOST_PORT> の既存セッションで
+<ノートブックファイル名> を pair してください。
+新しい marimo サーバーは起動しないでください。
+sandbox 内から接続できない場合は、接続スクリプトを sandbox 外で実行してください。
+```
+
+Agentとmarimoコンテナはどちらも踏み台サーバー上にあるため、この接続にポート転送は不要です。marimo-pairは内部でBashスクリプトを実行するため、Windowsクライアント上ではなく、Bashを利用できる踏み台サーバー上のAgentから実行する構成を推奨します。
+
+### クライアントPCのブラウザーで開く
+
+VS Codeのポートビューで「ポートの転送」を実行し、リモートポートに `.marimo-user.env` の `MARIMO_HOST_PORT` を指定します。ローカル側にも同じポート番号を指定してください。
+
+たとえば `MARIMO_HOST_PORT=12718` の場合、リモートポートとローカルポートをどちらも `12718` とし、クライアントPCのブラウザーで次のURLを開きます。
+
+```text
+http://localhost:12718
+```
+
+ローカル側で割当ポートが使用中の場合、別番号へ安易に変えるとAgentとブラウザーの接続先が分かりにくくなります。競合プロセスを停止するか、管理者に別の利用者固有ポートを確認して `MARIMO_HOST_PORT` も変更してください。
 
 ## 日常の操作
 
@@ -137,7 +154,7 @@ PC 側の `2718` が使用中の場合は、未使用のポート（例: `12718`
 
 ## DB設定を別の場所に置く場合
 
-既定のHOME配下を使えない場合は、利用者が別の絶対パスを指定できます。指定先も実行ユーザー所有で、親ディレクトリ `700`、ファイル `600` である必要があります。
+既定のリポジトリ直下以外へ配置する場合は、`MARIMO_DB_ENV` に絶対パスを指定できます。指定ファイルは実行ユーザー所有で、権限を `600` にしてください。
 
 ```bash
 MARIMO_USER_CONFIG=/path/to/user.env \
@@ -148,9 +165,10 @@ MARIMO_DB_ENV=/path/to/db.env \
 ## トラブルシューティング
 
 - `利用者設定ファイルがありません`: リポジトリ直下に `.marimo-user.env` を作成したか、`MARIMO_USER_CONFIG` のパスを確認します。
-- `DB設定ファイルがありません`: `~/.config/marimo-notebooks/db.env` を配置したか確認します。
-- DB設定ファイルの所有者・権限エラー: `chmod 700 ~/.config/marimo-notebooks` と `chmod 600 ~/.config/marimo-notebooks/db.env` を実行します。
+- `DB設定ファイルがありません`: リポジトリ直下に `db.env` を配置したか確認します。
+- DB設定ファイルの所有者・権限エラー: `chmod 600 db.env` を実行し、自分が所有者であることを確認します。
 - `ポート ... は既に使用されています`: 管理者に未使用ポートを確認し、`MARIMO_HOST_PORT` を変更します。
 - コンテナが起動しない: `./scripts/server/marimo_run.sh logs` と `sudo docker ps -a` で状態を確認します。
 - Notebookや`.venv`がroot所有になる: スクリプト全体をsudo化した独自ラッパーを使っていないか確認し、コンテナの `Config.User` が自分の `id -u:id -g` になっているか確認します。
-- ブラウザーから接続できない: コンテナの `status`、SSH トンネルの接続先ポート、ブラウザーの URL を順に確認します。踏み台サーバーのポートへ直接アクセスする構成ではありません。
+- marimo-pairから接続できない: Copilot Agentがリモート側で動作していることと、接続先が `http://localhost:<MARIMO_HOST_PORT>` であることを確認します。
+- ブラウザーから接続できない: コンテナの `status`、VS Codeのポートビューに表示されたリモート／ローカルポート、ブラウザーのURLを順に確認します。両方のポート番号は `MARIMO_HOST_PORT` と同じにします。
