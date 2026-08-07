@@ -67,9 +67,14 @@ def preview_data(penguins):
 @app.cell
 def controls(penguins):
     species_filter = mo.ui.dropdown(
-        options=["すべて"] + penguins["species"].unique().sort().to_list(),
+        options=["すべて", *penguins["species"].unique().sort().to_list()],
         value="すべて",
         label="ペンギンの種類",
+    )
+    island_filter = mo.ui.dropdown(
+        options=["すべて", *penguins["island"].unique().sort().to_list()],
+        value="すべて",
+        label="島",
     )
     min_mass = mo.ui.slider(
         start=2500,
@@ -82,21 +87,31 @@ def controls(penguins):
     mo.vstack(
         [
             mo.md("## 2. UIで表示対象を選ぶ"),
-            mo.hstack([species_filter, min_mass], justify="start", gap=2),
+            mo.hstack(
+                [species_filter, island_filter, min_mass],
+                justify="start",
+                gap=2,
+            ),
         ]
     )
-    return min_mass, species_filter
+    return island_filter, min_mass, species_filter
 
 
 @app.cell
-def filter_data(min_mass, penguins, species_filter):
+def filter_data(island_filter, min_mass, penguins, species_filter):
     _species_condition = (
         pl.lit(True)
         if species_filter.value == "すべて"
         else pl.col("species") == species_filter.value
     )
+    _island_condition = (
+        pl.lit(True)
+        if island_filter.value == "すべて"
+        else pl.col("island") == island_filter.value
+    )
     filtered_penguins = penguins.filter(
         _species_condition,
+        _island_condition,
         pl.col("body_mass_g").is_not_null(),
         pl.col("body_mass_g") >= min_mass.value,
         pl.col("bill_length_mm").is_not_null(),
@@ -106,10 +121,16 @@ def filter_data(min_mass, penguins, species_filter):
 
 
 @app.cell
-def selection_status(filtered_penguins, min_mass, species_filter):
+def selection_status(
+    filtered_penguins,
+    island_filter,
+    min_mass,
+    species_filter,
+):
     selected_count = filtered_penguins.height
     selected_avg_mass = filtered_penguins["body_mass_g"].mean()
     _selected_label = species_filter.value
+    _selected_island = island_filter.value
     _selected_avg_text = (
         f"{selected_avg_mass:,.0f} g" if selected_avg_mass is not None else "該当データなし"
     )
@@ -117,10 +138,11 @@ def selection_status(filtered_penguins, min_mass, species_filter):
         f"""
         ### 選択結果
 
-        **種類:** {_selected_label}　
-        **体重:** {min_mass.value:,} g以上　
-        **個体数:** {selected_count}羽　
-        **平均体重:** {_selected_avg_text}
+        - **種類:** {_selected_label}
+        - **島:** {_selected_island}
+        - **体重:** {min_mass.value:,} g以上
+        - **個体数:** {selected_count}羽
+        - **平均体重:** {_selected_avg_text}
         """
     )
     return
@@ -170,9 +192,8 @@ def exercise():
     mo.md("""
     ## 5. 試してみよう
 
-    - ペンギンの種類や最小体重を変更し、表とグラフが同時に変わることを確認する
-    - 散布図の横軸を `flipper_length_mm`（翼の長さ）に変えてみる
-    - `island`（島）を選ぶドロップダウンを追加してみる
+    - ペンギンの種類、島、最小体重を変更し、表とグラフが同時に変わることを確認する
+    - 散布図の横軸を `flipper_length_mm` (翼の長さ) に変えてみる
     - 集計表へ、くちばしの平均的な長さを追加してみる
 
     marimoではセルの実行順ではなく、**変数の依存関係**に沿って必要なセルが更新されます。

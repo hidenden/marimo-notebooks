@@ -174,10 +174,13 @@ Authentication:
   marimo token authentication is disabled.
   Keep the endpoint bound to localhost and use VS Code port forwarding.
 
-Copilot Agentへの指示例:
-  /marimo-pair http://localhost:${MARIMO_HOST_PORT} の既存セッションで
-  <ノートブックファイル名> を pair してください。
-  新しい marimo サーバーは起動しないでください。
+Copilot Agentへの指示（コピー後、末尾にNotebookパスを追記）:
+
+/marimo-pair http://localhost:${MARIMO_HOST_PORT} の既存セッションに接続し、
+以下に指定するNotebookをpairしてください。
+新しいmarimoサーバーは起動しないでください。
+
+対象Notebook:
 
 EOF
 }
